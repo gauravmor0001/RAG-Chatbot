@@ -1,0 +1,33 @@
+<!DOCTYPE>
+<html>
+    <head>
+        <title>RAG chatbot</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <header>
+            <h1>ChatBot</h1>
+            <p>Upload document to start discussion</p>
+        </header>
+        <main class="container">
+
+            <section class="upload">
+                <h2>Upload document</h2>
+                <input type="file" id="fileInput" />
+                <button id="uploadbutton">Upload</button>
+                <p id="uploadstatus">upload Staus</p>
+            </section>
+
+            <section class="chatbox">
+                <div class="chat-window" id="chatWindow"></div>
+                <div class="chat-input">
+                    <input type="text" id="userinput" placeholder="Ask a question about the document" />
+                    <button id="sendbutton">Send</button>
+                </div>
+
+            </section>
+        </main>
+        <script src="script.js"></script>
+        
+    </body>
+</html>
