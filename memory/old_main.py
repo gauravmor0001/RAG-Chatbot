@@ -27,7 +27,7 @@ config={
             "api_key":os.getenv("GROQ_API_KEY"),
             "model":"llama-3.3-70b-versatile",
         }
-    },
+    }, #the librarian (decide what to store)
     "vector_store":{
         "provider":"qdrant",
         "config":{
