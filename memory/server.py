@@ -1,3 +1,4 @@
+from tools import tools_schema, available_functions
 from mem0 import Memory
 from dotenv import load_dotenv
 import os
@@ -23,9 +24,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client=OpenAI(
-    base_url="https://router.huggingface.co/v1",
-    api_key=os.getenv("HUGGINGFACEHUB_API_TOKEN")
+# client=OpenAI(
+#     base_url="https://router.huggingface.co/v1",
+#     api_key=os.getenv("HUGGINGFACEHUB_API_TOKEN")
+# ) not good model for handling agents.
+
+client = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=os.getenv("GROQ_API_KEY")
 )
 
 config={
@@ -73,24 +79,59 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         print(f"Search error: {e}")
 
-
+    messages = []
     if memories:
         SYSTEM_PROMPT = f"""You are a helpful assistant with access to user history.
         Context about the user:
         {json.dumps(memories)}"""
     else:
         SYSTEM_PROMPT = "You are a helpful assistant that helps user"
+    messages.append({"role": "system", "content": SYSTEM_PROMPT})
+    messages.append({"role": "user", "content": user_query})
 
     try:
         
         response = client.chat.completions.create(
-            model="meta-llama/Llama-3.1-8B-Instruct",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_query}
-            ]
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            tools=tools_schema,
+            tool_choice="auto"
         )
-        ai_response = response.choices[0].message.content
+        ai_response = response.choices[0].message
+        tool_calls = ai_response.tool_calls
+
+        if tool_calls:
+            print("Agent decided to use a tool...") # Debug print
+            
+            # 1. Add the Assistant's "Thought" to history
+            messages.append(ai_response)
+
+            # 2. Run the Tools
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_to_call = available_functions.get(function_name)
+                
+                if function_to_call:
+                    # Run the Python function
+                    # (Currently checks time, no arguments needed)
+                    function_result = function_to_call()
+                    
+                    # Add the "Observation" (Result) to history
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": function_result,
+                    })
+            final_response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages
+            )
+            ai_response = final_response.choices[0].message.content
+            
+        else:
+            # No tool needed, just a normal chat reply
+            ai_response = ai_response.content
         
 
         mem_client.add(
