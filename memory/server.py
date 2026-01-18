@@ -1,4 +1,4 @@
-from tools import tools_schema, available_functions
+
 from mem0 import Memory
 from dotenv import load_dotenv
 import os
@@ -8,6 +8,13 @@ from fastapi import FastAPI,UploadFile,File,HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel #used to check wether the data we receive is in correct format or not.
 import uvicorn
+
+from langchain_groq import ChatGroq
+from langchain_core.messages import SystemMessage, HumanMessage
+from langgraph.graph import StateGraph, MessagesState, END
+from langgraph.prebuilt import ToolNode, tools_condition
+
+from tools import tools_list
 
 load_dotenv()
 
@@ -24,15 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# client=OpenAI(
-#     base_url="https://router.huggingface.co/v1",
-#     api_key=os.getenv("HUGGINGFACEHUB_API_TOKEN")
-# ) not good model for handling agents.
-
-client = OpenAI(
-    base_url="https://api.groq.com/openai/v1",
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
     api_key=os.getenv("GROQ_API_KEY")
 )
+llm_with_tools = llm.bind_tools(tools_list)
 
 config={
     "version":"v1.1",
@@ -63,6 +66,27 @@ config={
 
 mem_client=Memory.from_config(config)
 
+def reasoner(state: MessagesState):
+    return {"messages": [llm_with_tools.invoke(state["messages"])]}
+
+workflow = StateGraph(MessagesState)
+
+workflow.add_node("agent", reasoner)
+workflow.add_node("tools", ToolNode(tools_list))
+
+workflow.set_entry_point("agent")
+def should_continue(state: MessagesState):
+    last_message = state["messages"][-1]
+    if last_message.tool_calls:
+        return "tools"
+    return END
+workflow.add_conditional_edges(
+    "agent",
+    should_continue,
+)
+workflow.add_edge("tools", "agent")
+agent_app = workflow.compile()
+
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     user_query = request.message
@@ -79,61 +103,25 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         print(f"Search error: {e}")
 
-    messages = []
+    # messages = []
     if memories:
         SYSTEM_PROMPT = f"""You are a helpful assistant with access to user history.
         Context about the user:
         {json.dumps(memories)}"""
     else:
         SYSTEM_PROMPT = "You are a helpful assistant that helps user"
-    messages.append({"role": "system", "content": SYSTEM_PROMPT})
-    messages.append({"role": "user", "content": user_query})
+    # messages.append({"role": "system", "content": SYSTEM_PROMPT})
+    # messages.append({"role": "user", "content": user_query})
+
+    input_messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=user_query)
+    ]
+    final_state = agent_app.invoke({"messages": input_messages})
+    ai_response = final_state["messages"][-1].content
 
     try:
         
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=messages,
-            tools=tools_schema,
-            tool_choice="auto"
-        )
-        ai_response = response.choices[0].message
-        tool_calls = ai_response.tool_calls
-
-        if tool_calls:
-            print("Agent decided to use a tool...") # Debug print
-            
-            # 1. Add the Assistant's "Thought" to history
-            messages.append(ai_response)
-
-            # 2. Run the Tools
-            for tool_call in tool_calls:
-                function_name = tool_call.function.name
-                function_to_call = available_functions.get(function_name)
-                
-                if function_to_call:
-                    # Run the Python function
-                    # (Currently checks time, no arguments needed)
-                    function_result = function_to_call()
-                    
-                    # Add the "Observation" (Result) to history
-                    messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": function_name,
-                        "content": function_result,
-                    })
-            final_response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=messages
-            )
-            ai_response = final_response.choices[0].message.content
-            
-        else:
-            # No tool needed, just a normal chat reply
-            ai_response = ai_response.content
-        
-
         mem_client.add(
             user_id="DareDevil",
             messages=[
