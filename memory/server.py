@@ -32,7 +32,7 @@ app.add_middleware(
 )
 
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="llama-3.1-8b-instant",
     api_key=os.getenv("GROQ_API_KEY")
 )
 llm_with_tools = llm.bind_tools(tools_list)
@@ -92,7 +92,7 @@ async def chat_endpoint(request: ChatRequest):
     user_query = request.message
     memories = []
     try:
-        search_results = mem_client.search(query=user_query, user_id="DareDevil")
+        search_results = mem_client.search(query=user_query, user_id="DareDevil",limit=1)
         if isinstance(search_results, list):
             memories = [f"Memory: {mem.get('memory', mem)}" for mem in search_results]
         elif isinstance(search_results, dict):
