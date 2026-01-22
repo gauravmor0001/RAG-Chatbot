@@ -4,6 +4,7 @@ from langchain_core.tools import tool
 # from pydantic import BaseModel, Field
 # from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.tools import TavilySearchResults
+import wikipedia
 
 # class SearchInput(BaseModel):
 #     query: str = Field(description="The query to search for on the internet.")
@@ -15,24 +16,12 @@ def get_current_time():
 @tool
 def web_search(query: str):
     """
-    Search the internet for real-time information, news, or facts.
+    Search the internet for real-time information, news, weather, or facts.
     Use this when the user asks about current events or topics you don't know.
     """
     try:
-        # with DDGS() as ddgs:
-        #     results=list(ddgs.text(query,max_results=5))
-        #     if not results:
-        #         return "No results found."
-            
-        #     formatted_results=[]
-        #     for result in results:
-        #         formatted_results.append(f"Title: {result['title']}\nLink: {result['href']}\nSnippet: {result['body']}")
-        #     return "\n\n".join(formatted_results)
-
-        #     search = DuckDuckGoSearchRun()
-        #     return search.invoke(query)
         
-        tool = TavilySearchResults(max_results=5)
+        tool = TavilySearchResults(max_results=3)
         # this automatically access the api_key.
 
         results = tool.invoke({"query": query})
@@ -44,25 +33,21 @@ def web_search(query: str):
     
     except Exception as e:
         return f"Search failed: {str(e)}"
+    
+@tool
+def search_wikipedia(query:str):
+    """
+    Search Wikipedia for definitions, historical facts, or technical concepts.
+    Use this for academic topics, famous people, or established knowledge.
+    """
+    try:
+        return wikipedia.summary(query,sentences=3)
+    except wikipedia.exceptions.DisambiguationError as e:
+        return f"Ambiguous query. Options: {e.options[:5]}"
+    except wikipedia.exceptions.PageError:
+        return "Page not found on Wikipedia."
+    except Exception as e:
+        return f"Wikipedia search failed: {str(e)}"
 
 
-
-
-
-# tools_schema = [
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "get_current_time",
-#             "description": "Get the current real-time date and time",
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {}, 
-#                 "required": [],
-#             },
-#         },
-#     }
-# ]
-# not needed with langraph,it will auto generate.
-
-tools_list = [get_current_time , web_search]
+tools_list = [get_current_time , web_search,search_wikipedia]
