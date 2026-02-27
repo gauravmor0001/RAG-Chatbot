@@ -1,41 +1,3 @@
-<!-- <!DOCTYPE>
-<html>
-    <head>
-        <title>RAG chatbot</title>
-        <link rel="stylesheet" href="style.css">
-    </head>
-    <body>
-        <header>
-            <h1>ChatBot</h1>
-            <p>Upload document to start discussion</p>
-        </header>
-        <main class="container">
-
-            <section class="uploadbox">
-                <h2>Upload document</h2>
-                <input type="file" id="fileInput" />
-                <button id="uploadbutton">Upload</button>
-                <p id="uploadstatus">upload Staus</p>
-            </section>
-
-            <section class="chatbox">
-                <div class="chat-window" id="chatwindow"></div>
-                <div class="chat-input">
-                    <input type="text" id="userinput" placeholder="Message ChatBot..." autocomplete="off" />
-                    <button id="sendbutton">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
-                            <path d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z" fill="white"/>
-                        </svg>
-                    </button>
-                </div>
-
-            </section>
-        </main>
-        <script src="script.js"></script>
-        
-    </body>
-</html> -->
-
 
 <!DOCTYPE html>
 <html>
@@ -95,6 +57,20 @@
                     New Chat
                 </button>
             </div>
+            <div style="padding: 0 15px 15px 15px; border-bottom: 1px solid #333; margin-bottom: 10px;">
+                <p style="color: #666; font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Knowledge Base</p>
+                
+                <input type="file" id="fileInput" style="display: none;" onchange="uploadFile()">
+                
+                <button onclick="document.getElementById('fileInput').click()" 
+                        style="width: 100%; background: #2a2a2a; border: 1px dashed #555; color: #ccc; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload PDF
+                </button>
+                
+                <div id="uploadStatus" style="font-size: 11px; margin-top: 8px; text-align: center; min-height: 15px;"></div>
+            </div>
+            
             
             <div class="conversations-list" id="conversations-list">
                 </div>

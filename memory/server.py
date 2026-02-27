@@ -2,23 +2,30 @@ from mem0 import Memory
 from dotenv import load_dotenv
 import os
 import json
-from fastapi import FastAPI, HTTPException,Header
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import uvicorn
 import time
 import re #using it to find xml.
+from pydantic import BaseModel
+from fastapi import File, UploadFile
+from fastapi import FastAPI, HTTPException,Header
+from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import AIMessage
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_community.document_loaders import PyPDFLoader, TextLoader,Docx2txtLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_qdrant import QdrantVectorStore
+from langchain_huggingface import HuggingFaceEmbeddings
 from tools import tools_list
 from typing import Optional
 import jwt
 from datetime import datetime, timedelta
 from database import UserDatabase
-
+import tempfile
+from file_processor import process_and_store_file, search_conversation_documents, get_conversation_document_info
+import shutil #this handles file operations(high level operations like copying,deleting etc)
 load_dotenv()
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this")
@@ -193,7 +200,42 @@ def verify_token(authorization: Optional[str]):
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+print("🔌 Loading Embedding Model...")
+embedding_model = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+@app.post("/upload-doc")
+async def upload_and_ingest(file: UploadFile=File(...)):
+    try:
+        #Save the file temporarily
+        temp_filename = f"temp_{file.filename}"
+        with open(temp_filename, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        print(f"DEBUG: Processing {temp_filename}...")
 
+        if temp_filename.endswith(".pdf"):
+            loader = PyPDFLoader(temp_filename)
+        elif temp_filename.endswith(".docx"):  
+            loader = Docx2txtLoader(temp_filename)
+        else:
+            loader = TextLoader(temp_filename)
+        docs = loader.load()
+        print(f"DEBUG: Content read from file: {docs}")
+        
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        splits = text_splitter.split_documents(docs)
+        QdrantVectorStore.from_documents(
+            splits,
+            embedding_model,
+            url="http://localhost:6333",
+            collection_name="learning-rag"
+        )
+        os.remove(temp_filename)
+        return {"status": "success", "message": f"Successfully learned from {file.filename}!"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.post("/register")
 async def register(request: RegisterRequest):
@@ -293,27 +335,27 @@ async def chat_endpoint(request: ChatRequest,authorization: Optional[str] = Head
         'weather', 'news', 'price', 'stock', 'gdp', 'election', 'score'
     ]
     
-    factual_keywords = [
-        'what is', 'what are', 'define', 'explain', 'tell me about', 
-        'who is', 'who are', 'how does', 'describe', 'meaning of'
-    ]
+    # factual_keywords = [
+    #     'what is', 'what are', 'define', 'explain', 'tell me about', 
+    #     'who is', 'who are', 'how does', 'describe', 'meaning of'
+    # ]
     
     # Check if question needs real-time data
     needs_realtime = any(keyword in user_query.lower() for keyword in realtime_keywords)
     
     # Only treat as simple factual question if it doesn't need real-time data
-    asking_for_facts = (
-        any(keyword in user_query.lower() for keyword in factual_keywords) 
-        and not needs_realtime
-    )
+    # asking_for_facts = (
+    #     any(keyword in user_query.lower() for keyword in factual_keywords) 
+    #     and not needs_realtime
+    # )
     
     # 1. RETRIEVE MEMORIES
     memories = []
     
-    if asking_for_facts:
-        print("DEBUG: Factual question - skipping memory retrieval")
-    else:
-        try:
+    # if asking_for_facts:
+    # print("DEBUG: Factual question - skipping memory retrieval")
+    # else:
+    try:
             search_results = mem_client.search(query=user_query, user_id=user_id, limit=3)
             if search_results:
                 raw = search_results if isinstance(search_results, list) else search_results.get("results", [])
@@ -325,14 +367,18 @@ async def chat_endpoint(request: ChatRequest,authorization: Optional[str] = Head
                         print(f"DEBUG: Using memory (score: {score}): {text[:50]}...")
                     else:
                         print(f"DEBUG: Skipping low-relevance memory (score: {score})")
-        except Exception as e:
+    except Exception as e:
             print(f"DEBUG: Memory Error: {e}")
 
     base_prompt = (
         "You are a helpful assistant. "
-        "Answer the user's current question directly and accurately. "
-        "For common knowledge questions, answer from your knowledge. "
-        "Only use tools for current events, news, weather, or real-time information."
+    "Answer the user's current question directly and accurately. "
+    "For common knowledge questions, answer from your knowledge. "
+    "You have access to a **Knowledge Base of uploaded documents**. "
+    "**ALWAYS use the 'search_knowledge_base' tool if the user asks about specific people (like Gaurav), resumes, project details, or specific file content.** "
+    "For current events, news, weather, or real-time information, use the web_search tool. "
+    "When you receive search results, synthesize ALL the information provided, not just the last line. "
+    "Always cite your sources when using web search."
     )
 
     if memories:
@@ -354,10 +400,10 @@ async def chat_endpoint(request: ChatRequest,authorization: Optional[str] = Head
     ai_response = ""
     try:
         
-        if asking_for_facts:
-            final_state = simple_agent.invoke({"messages": input_messages})
-        else:
-            final_state = agent_app.invoke({"messages": input_messages})
+        # if asking_for_facts:
+        #     final_state = simple_agent.invoke({"messages": input_messages})
+        # else:
+        final_state = agent_app.invoke({"messages": input_messages})
         
         # for i, msg in enumerate(final_state["messages"]):
         #     print(f"  [{i}] {type(msg).__name__}: {str(msg.content)[:200]}")

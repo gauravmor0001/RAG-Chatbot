@@ -1,14 +1,13 @@
 from datetime import datetime
 from langchain_core.tools import tool
-# from duckduckgo_search import DDGS
-# from pydantic import BaseModel, Field
-# from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.tools import TavilySearchResults
 import wikipedia
+from langchain_qdrant import QdrantVectorStore
+from langchain_huggingface import HuggingFaceEmbeddings
 
-# class SearchInput(BaseModel):
-#     query: str = Field(description="The query to search for on the internet.")
-
+embedding_model = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
 @tool
 def get_current_time():
     """Get the current real-time date and time."""
@@ -29,7 +28,10 @@ def web_search(query: str):
         for res in results:
             output.append(f"Source: {res.get('url')}\nContent: {res.get('content')}")
             
-        return "\n\n".join(output)
+        final_output = "\n\n".join(output)
+        print(f"DEBUG: Web search returned {len(results)} results")
+        print(f"DEBUG: Full output:\n{final_output}")  # ← Add this
+        return final_output
     
     except Exception as e:
         return f"Search failed: {str(e)}"
@@ -48,6 +50,30 @@ def search_wikipedia(query:str):
         return "Page not found on Wikipedia."
     except Exception as e:
         return f"Wikipedia search failed: {str(e)}"
+    
+
+@tool
+def search_knowledge_base(query: str):
+    """
+    Use this tool to search for information inside the uploaded PDF documents or text files.
+    Input should be a specific search query related to the documents.
+    Returns the relevant text snippets from the files.
+    """
+    print(f"DEBUG: Searching Knowledge Base for: '{query}'")
+    try:
+        vector_db = QdrantVectorStore.from_existing_collection(
+            embedding=embedding_model,
+            url="http://localhost:6333",
+            collection_name="learning-rag"
+        )
+        results = vector_db.similarity_search(query, k=3)
+        if not results:
+            return "No relevant information found in the documents."
+        context = "\n\n".join([f"Snippet: {res.page_content}" for res in results])
+        return context
+
+    except Exception as e:
+        return f"Error searching documents: {str(e)}"
 
 
-tools_list = [get_current_time , web_search,search_wikipedia]
+tools_list = [get_current_time , web_search,search_wikipedia,search_knowledge_base]

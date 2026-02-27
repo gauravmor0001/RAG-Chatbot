@@ -408,3 +408,46 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 });
+
+async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    const statusDiv = document.getElementById('uploadStatus');
+    const file = fileInput.files[0];
+
+    if (!file) return;
+
+    // 1. UI Feedback
+    statusDiv.innerText = "⏳ Reading & Learning...";
+    statusDiv.style.color = "#FFD700"; // Gold
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        // 2. Send to Backend
+        // Note: We use the port 5000 as per your server.py
+        const response = await fetch('http://127.0.0.1:5000/upload-doc', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        
+        // 3. Handle Result
+        if (data.status === "success") {
+            statusDiv.innerText = "✅ Knowledge Added!";
+            statusDiv.style.color = "#4caf50"; // Green
+            fileInput.value = ""; // Reset input
+            
+            // Optional: clear message after 3 seconds
+            setTimeout(() => { statusDiv.innerText = ""; }, 3000);
+        } else {
+            statusDiv.innerText = "❌ Error: " + data.message;
+            statusDiv.style.color = "#f44336"; // Red
+        }
+    } catch (error) {
+        statusDiv.innerText = "❌ Server Error";
+        statusDiv.style.color = "#f44336";
+        console.error('Upload error:', error);
+    }
+}
