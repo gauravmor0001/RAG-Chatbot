@@ -1,5 +1,19 @@
-.env
+# Python caches
+__pycache__/
+*.pyc
 
+# Virtual Environments
 .venv/
 venv/
-env/
+
+# Secrets and Environment Variables
+.env
+backend/.env
+
+# Databases (NEVER push user data to GitHub)
+*.db
+backend/data/
+
+# Uploaded documents
+backend/docs/
+temp_*

@@ -3,10 +3,19 @@ import bcrypt
 import uuid
 from datetime import datetime
 import json
+import os
 
 class UserDatabase:
-    def __init__(self, db_path="users.db"):
-        self.db_path=db_path
+    def __init__(self, db_path=None):
+        if db_path is None:
+            # This automatically finds the 'data/users.db' folder next to this file
+            self.db_path = os.path.join(os.path.dirname(__file__), "data", "users.db")
+        else:
+            self.db_path = db_path
+            
+        # Create the 'data' folder if it doesn't exist yet
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        
         self.init_database()
     
     def init_database(self):
