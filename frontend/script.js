@@ -218,17 +218,20 @@ async function sendMessage() {
     const userInput = document.getElementById('userinput');
     const message = userInput.value.trim();
     
-    if (!message) {
-        return;
-    }
-    
-    if (!authToken) {
-        alert('Please login first');
-        return;
-    }
+    if (!message) return;
+    if (!authToken) { alert('Please login first'); return; }
     
     addMessageToUI("You", message, "user-message");
     userInput.value = "";
+
+    // Add thinking bubble
+    const chatwindow = document.getElementById('chatwindow');
+    const thinkingDiv = document.createElement('div');
+    thinkingDiv.className = 'message bot-message';
+    thinkingDiv.id = 'thinking-indicator';
+    thinkingDiv.innerHTML = '<strong>Bot: </strong><span style="color:#999;font-style:italic;">Thinking...</span>';
+    chatwindow.appendChild(thinkingDiv);
+    chatwindow.scrollTop = chatwindow.scrollHeight;
 
     try {
         const response = await fetch('http://127.0.0.1:5000/chat', {
@@ -245,6 +248,9 @@ async function sendMessage() {
         
         const data = await response.json();
 
+        // Remove thinking bubble
+        document.getElementById('thinking-indicator')?.remove();
+
         if (response.ok) {
             if (data.response) {
                 addMessageToUI("Bot", data.response, "bot-message");
@@ -252,25 +258,19 @@ async function sendMessage() {
                 if (data.conversation_id) {
                     const wasNewConversation = !currentConversationId;
                     currentConversationId = data.conversation_id;
-                    
-                    if (wasNewConversation) {
-                        setTimeout(() => {
-                            loadConversations();
-                        }, 100);
-                    }
+                    if (wasNewConversation) setTimeout(() => loadConversations(), 100);
                 }
             }
         } else {
             if (response.status === 401) {
                 addMessageToUI("System", "Session expired. Please login again.", "error-message");
-                setTimeout(() => {
-                    document.getElementById('logout-button').click();
-                }, 2000);
+                setTimeout(() => document.getElementById('logout-button').click(), 2000);
             } else {
                 addMessageToUI("System", "Error: " + (data.detail || JSON.stringify(data)), "error-message");
             }
         }
     } catch (error) {
+        document.getElementById('thinking-indicator')?.remove();
         console.error('Send message error:', error);
         addMessageToUI("System", "Server connection failed.", "error-message");
     }
@@ -428,6 +428,9 @@ async function uploadFile() {
         // Note: We use the port 5000 as per your server.py
         const response = await fetch('http://127.0.0.1:5000/upload-doc', {
             method: 'POST',
+            headers: {  
+                'Authorization': `Bearer ${authToken}`
+            },
             body: formData
         });
 

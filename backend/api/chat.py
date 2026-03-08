@@ -12,7 +12,7 @@ import json
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage  #systemMessage is instruction to the model.
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, MessagesState, END
-from langgraph.prebuilt import ToolNode, tools_condition #run tools for llm.
+from langgraph.prebuilt import ToolNode, tools_condition 
 from mem0 import Memory
 from tools import tools_list
 
@@ -26,7 +26,7 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
 
-MODEL_NAME = "llama-3.1-8b-instant"
+MODEL_NAME = "llama-3.3-70b-versatile"
 llm = ChatGroq(
     model=MODEL_NAME, 
     api_key=os.getenv("GROQ_API_KEY"),
@@ -97,7 +97,7 @@ def reasoner(state: MessagesState):
     response = llm_with_tools.invoke(state["messages"])
     # Take the AI's new reply, add it to the list of messages, 
     # and send it back to the flowchart
-    return {"messages": state["messages"] + [response]}
+    return {"messages":  [response]}
 
 
 workflow = StateGraph(MessagesState)
@@ -107,17 +107,14 @@ workflow.add_node("normalize", normalize_tool_calls)
 
 workflow.set_entry_point("agent")
 workflow.add_edge("agent", "normalize")
-workflow.add_conditional_edges("normalize", tools_condition)
+workflow.add_conditional_edges("normalize", tools_condition) #tools condition is pre defined if the normalize node send a tool call it understnand and call the tool.
 workflow.add_edge("tools", "agent")
 
 agent_app = workflow.compile()
 
-# ==========================================
-# API ENDPOINTS (The Communication Layer)
-# ==========================================
 
 @router.get("/conversations")
-async def get_conversations(authorization: Optional[str] = Header(None)):
+async def get_conversations(authorization: Optional[str] = Header(None)): #telling that look only in header it can be or can not be present if not dont crash.
     """Fetches a list of all chat histories for the logged-in user."""
     user_id, username = verify_token(authorization)
     conversations = db.get_conversations(user_id)
@@ -152,19 +149,16 @@ async def delete_conversation(conversation_id: str, authorization: Optional[str]
 
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest, authorization: Optional[str] = Header(None)):
-    """The main engine. Receives a message, runs the AI, and saves the memory."""
-    # 1. Bouncer: Check who the user is
     user_id, username = verify_token(authorization)
     user_query = request.message
     conv_id = request.conversation_id 
 
-    # 2. Setup: Ensure we have a valid conversation ID to save messages to
     if not conv_id:
         conv_id = db.create_conversation(user_id)
         if not conv_id:
             raise HTTPException(status_code=500, detail="Failed to create conversation")
 
-    # 3. Memory Retrieval: Ask Mem0 if it knows anything relevant about this user
+    #  Memory Retrieval: Ask Mem0 if it knows anything relevant about this user
     memories = []
     try:
         search_results = mem_client.search(query=user_query, user_id=user_id, limit=3)
@@ -178,13 +172,17 @@ async def chat_endpoint(request: ChatRequest, authorization: Optional[str] = Hea
     except Exception as e:
         print(f"DEBUG: Memory Error: {e}")
 
-    # 4. Prompt Assembly: Give the AI its instructions and the injected Mem0 context
     base_prompt = (
-        "You are a helpful assistant. Answer the user's current question directly and accurately. "
-        "You have access to a **Knowledge Base of uploaded documents**. "
-        "ALWAYS use the 'search_knowledge_base' tool if the user asks about specific people, resumes, project details, or specific file content. "
-        "For current events, news, or real-time information, use the web_search tool. "
-        "Always cite your sources when using web search."
+        "You are a helpful assistant. "
+        "You have three tools available:\n"
+        "1. 'search_knowledge_base' — use ONLY for questions about uploaded documents, resumes, or personal files.\n"
+        "2. 'web_search' — use ONLY for current events, news, or real-time information.\n\n"
+        "3. 'get_current_time'- return the time and date"
+        "STRICT RULES:\n"
+        "- Call each tool AT MOST ONCE per user question.\n"
+        "- NEVER call search_knowledge_base for general knowledge or news questions.\n"
+        "- NEVER call web_search for questions about uploaded documents.\n"
+        "- Once you have tool results, answer immediately. Do NOT search again."
     )
 
     if memories:
@@ -203,13 +201,13 @@ async def chat_endpoint(request: ChatRequest, authorization: Optional[str] = Hea
         
         ai_response = final_state["messages"][-1].content
 
-        # 6. Save Short-Term Memory (to SQLite for the UI)
+       
         try:
             db.add_message_to_conversation(conv_id, user_id, user_query, ai_response)
         except Exception as conv_err:
             print(f"DEBUG: Failed to save to SQL: {conv_err}")
         
-        # 7. Save Long-Term Memory (to Mem0/Qdrant for future AI context)
+        # Save Long-Term Memory (to Mem0/Qdrant for future AI context)
         try:
             mem_client.add(user_id=user_id, messages=[{"role": "user", "content": user_query}, {"role": "assistant", "content": ai_response}])
         except Exception as mem_err:

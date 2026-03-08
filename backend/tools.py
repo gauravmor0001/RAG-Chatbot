@@ -42,20 +42,20 @@ def web_search(query: str):
     except Exception as e:
         return f"Search failed: {str(e)}"
     
-@tool
-def search_wikipedia(query:str):
-    """
-    Search Wikipedia for definitions, historical facts, or technical concepts.
-    Use this for academic topics, famous people, or established knowledge.
-    """
-    try:
-        return wikipedia.summary(query,sentences=3)
-    except wikipedia.exceptions.DisambiguationError as e:
-        return f"Ambiguous query. Options: {e.options[:5]}"
-    except wikipedia.exceptions.PageError:
-        return "Page not found on Wikipedia."
-    except Exception as e:
-        return f"Wikipedia search failed: {str(e)}"
+# @tool
+# def search_wikipedia(query:str):
+#     """
+#     Search Wikipedia for definitions, historical facts, or technical concepts.
+#     Use this for academic topics, famous people, or established knowledge.
+#     """
+#     try:
+#         return wikipedia.summary(query,sentences=3)
+#     except wikipedia.exceptions.DisambiguationError as e:
+#         return f"Ambiguous query. Options: {e.options[:5]}"
+#     except wikipedia.exceptions.PageError:
+#         return "Page not found on Wikipedia."
+#     except Exception as e:
+#         return f"Wikipedia search failed: {str(e)}"
     
 
 @tool
@@ -101,7 +101,7 @@ def search_knowledge_base(query: str, config: RunnableConfig):
         return f"Error searching documents: {str(e)}"
 
 
-tools_list = [get_current_time , web_search,search_wikipedia,search_knowledge_base]
+tools_list = [get_current_time , web_search,search_knowledge_base]
 
 #we have not given user_id to llm as to protect from prompt injection attack.as llm fills out the parameter of search_knowledge_base when the tool is called.
 #so we use config={"configurable": {"user_id": user_id}}

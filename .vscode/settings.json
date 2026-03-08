@@ -1,9 +1,12 @@
 {
+    "liveServer.settings.root": "/frontend",
     "liveServer.settings.ignoreFiles": [
         "**/memory/**",
         "**/*.db",
         "**/*.sqlite",
         "**/*.pyc",
-        "**/__pycache__/**"
+        "**/__pycache__/**",
+        "**/temp_*",
+        "**/backend/**"
     ]
 }
